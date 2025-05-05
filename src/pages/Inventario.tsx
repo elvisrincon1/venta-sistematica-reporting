@@ -29,7 +29,7 @@ const Inventario = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [deleteAlertOpen, setDeleteAlertOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<string | null>(null);
-  // Add validation state to show which fields are missing
+  // Validation state to show which fields are missing
   const [validationErrors, setValidationErrors] = useState<{
     nombre?: boolean;
     precioCompra?: boolean;
@@ -140,6 +140,26 @@ const Inventario = () => {
     proveedor.id !== proveedor1Id
   );
 
+  const handleSelectProveedor1 = (value: string) => {
+    console.log("Selecting primary provider:", value);
+    setProveedor1Id(value);
+    setOpenProveedor1(false);
+    // Clear validation error when selected
+    if (validationErrors.proveedor1) {
+      setValidationErrors({...validationErrors, proveedor1: false});
+    }
+    // Reset secondary provider if it's the same as the primary
+    if (proveedor2Id === value) {
+      setProveedor2Id('');
+    }
+  };
+
+  const handleSelectProveedor2 = (value: string) => {
+    console.log("Selecting secondary provider:", value);
+    setProveedor2Id(value === proveedor2Id ? '' : value);
+    setOpenProveedor2(false);
+  };
+
   return (
     <div className="container mx-auto">
       <div className="flex justify-between items-center mb-6">
@@ -244,17 +264,7 @@ const Inventario = () => {
                             <CommandItem
                               key={proveedor.id}
                               value={proveedor.id}
-                              onSelect={(currentValue) => {
-                                setProveedor1Id(currentValue);
-                                setOpenProveedor1(false);
-                                if (proveedor2Id === currentValue) {
-                                  setProveedor2Id('');
-                                }
-                                // Clear validation error when selected
-                                if (validationErrors.proveedor1) {
-                                  setValidationErrors({...validationErrors, proveedor1: false});
-                                }
-                              }}
+                              onSelect={() => handleSelectProveedor1(proveedor.id)}
                             >
                               <Check
                                 className={cn(
@@ -286,7 +296,7 @@ const Inventario = () => {
                       role="combobox"
                       aria-expanded={openProveedor2}
                       className="w-full justify-between"
-                      disabled={!proveedor1Id} // This is fine, secondary provider is optional
+                      disabled={!proveedor1Id} // Disabled if primary provider is not selected
                     >
                       {proveedor2Id ? proveedores.find((p) => p.id === proveedor2Id)?.nombre : "Seleccionar proveedor..."}
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -306,10 +316,7 @@ const Inventario = () => {
                             <CommandItem
                               key={proveedor.id}
                               value={proveedor.id}
-                              onSelect={(currentValue) => {
-                                setProveedor2Id(currentValue === proveedor2Id ? '' : currentValue);
-                                setOpenProveedor2(false);
-                              }}
+                              onSelect={() => handleSelectProveedor2(proveedor.id)}
                             >
                               <Check
                                 className={cn(
