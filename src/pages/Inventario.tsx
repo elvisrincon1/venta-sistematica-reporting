@@ -29,15 +29,45 @@ const Inventario = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [deleteAlertOpen, setDeleteAlertOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<string | null>(null);
+  // Add validation state to show which fields are missing
+  const [validationErrors, setValidationErrors] = useState<{
+    nombre?: boolean;
+    precioCompra?: boolean;
+    precioVenta?: boolean;
+    proveedor1?: boolean;
+  }>({});
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Reset validation errors
+    setValidationErrors({});
+    
+    // Collect validation errors
+    const errors: {
+      nombre?: boolean;
+      precioCompra?: boolean;
+      precioVenta?: boolean;
+      proveedor1?: boolean;
+    } = {};
+    
+    if (!nombre) errors.nombre = true;
+    if (!precioCompra) errors.precioCompra = true;
+    if (!precioVenta) errors.precioVenta = true;
+    if (!proveedor1Id) errors.proveedor1 = true;
+    
+    // If there are errors, show them and prevent submission
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      toast.error('Por favor complete todos los campos requeridos');
+      return;
+    }
+    
     const precioCompraNum = parseFloat(precioCompra);
     const precioVentaNum = parseFloat(precioVenta);
     
-    if (!nombre || isNaN(precioCompraNum) || isNaN(precioVentaNum) || !proveedor1Id) {
-      toast.error('Por favor complete todos los campos requeridos');
+    if (isNaN(precioCompraNum) || isNaN(precioVentaNum)) {
+      toast.error('Los precios deben ser valores numéricos');
       return;
     }
     
@@ -74,6 +104,7 @@ const Inventario = () => {
     setProveedor1Id('');
     setProveedor2Id('');
     setEditingId(null);
+    setValidationErrors({});
   };
 
   const handleEdit = (producto: Producto) => {
@@ -123,18 +154,25 @@ const Inventario = () => {
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-6 py-4">
               <div className="space-y-2">
-                <Label htmlFor="nombre">Nombre</Label>
+                <Label htmlFor="nombre" className="flex">
+                  Nombre <span className="text-red-500 ml-1">*</span>
+                </Label>
                 <Input
                   id="nombre"
                   value={nombre}
                   onChange={(e) => setNombre(e.target.value)}
-                  required
+                  className={cn(validationErrors.nombre && "border-red-500")}
                 />
+                {validationErrors.nombre && (
+                  <p className="text-sm text-red-500">Este campo es requerido</p>
+                )}
               </div>
               
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="precioCompra">Precio de Compra</Label>
+                  <Label htmlFor="precioCompra" className="flex">
+                    Precio de Compra <span className="text-red-500 ml-1">*</span>
+                  </Label>
                   <Input
                     id="precioCompra"
                     type="number"
@@ -142,11 +180,16 @@ const Inventario = () => {
                     min="0"
                     value={precioCompra}
                     onChange={(e) => setPrecioCompra(e.target.value)}
-                    required
+                    className={cn(validationErrors.precioCompra && "border-red-500")}
                   />
+                  {validationErrors.precioCompra && (
+                    <p className="text-sm text-red-500">Este campo es requerido</p>
+                  )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="precioVenta">Precio de Venta</Label>
+                  <Label htmlFor="precioVenta" className="flex">
+                    Precio de Venta <span className="text-red-500 ml-1">*</span>
+                  </Label>
                   <Input
                     id="precioVenta"
                     type="number"
@@ -154,8 +197,11 @@ const Inventario = () => {
                     min="0"
                     value={precioVenta}
                     onChange={(e) => setPrecioVenta(e.target.value)}
-                    required
+                    className={cn(validationErrors.precioVenta && "border-red-500")}
                   />
+                  {validationErrors.precioVenta && (
+                    <p className="text-sm text-red-500">Este campo es requerido</p>
+                  )}
                 </div>
               </div>
               
@@ -166,14 +212,19 @@ const Inventario = () => {
               )}
               
               <div className="space-y-2">
-                <Label htmlFor="proveedor1">Proveedor Principal (obligatorio)</Label>
+                <Label htmlFor="proveedor1" className="flex">
+                  Proveedor Principal <span className="text-red-500 ml-1">*</span>
+                </Label>
                 <Popover open={openProveedor1} onOpenChange={setOpenProveedor1}>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
                       role="combobox"
                       aria-expanded={openProveedor1}
-                      className="w-full justify-between"
+                      className={cn(
+                        "w-full justify-between",
+                        validationErrors.proveedor1 && "border-red-500"
+                      )}
                     >
                       {proveedor1Id ? proveedores.find((p) => p.id === proveedor1Id)?.nombre : "Seleccionar proveedor..."}
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -199,6 +250,10 @@ const Inventario = () => {
                                 if (proveedor2Id === currentValue) {
                                   setProveedor2Id('');
                                 }
+                                // Clear validation error when selected
+                                if (validationErrors.proveedor1) {
+                                  setValidationErrors({...validationErrors, proveedor1: false});
+                                }
                               }}
                             >
                               <Check
@@ -215,10 +270,15 @@ const Inventario = () => {
                     </Command>
                   </PopoverContent>
                 </Popover>
+                {validationErrors.proveedor1 && (
+                  <p className="text-sm text-red-500">Este campo es requerido</p>
+                )}
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="proveedor2">Proveedor Secundario (opcional)</Label>
+                <Label htmlFor="proveedor2">
+                  Proveedor Secundario <span className="text-muted-foreground text-sm">(opcional)</span>
+                </Label>
                 <Popover open={openProveedor2} onOpenChange={setOpenProveedor2}>
                   <PopoverTrigger asChild>
                     <Button
@@ -226,7 +286,7 @@ const Inventario = () => {
                       role="combobox"
                       aria-expanded={openProveedor2}
                       className="w-full justify-between"
-                      disabled={!proveedor1Id}
+                      disabled={!proveedor1Id} // This is fine, secondary provider is optional
                     >
                       {proveedor2Id ? proveedores.find((p) => p.id === proveedor2Id)?.nombre : "Seleccionar proveedor..."}
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -265,10 +325,16 @@ const Inventario = () => {
                     </Command>
                   </PopoverContent>
                 </Popover>
+                {!proveedor1Id && (
+                  <p className="text-sm text-amber-500">Seleccione primero un proveedor principal</p>
+                )}
               </div>
 
               <div className="flex justify-end space-x-2 pt-4">
-                <Button variant="outline" type="button" onClick={() => setIsDialogOpen(false)}>
+                <Button variant="outline" type="button" onClick={() => {
+                  resetForm();
+                  setIsDialogOpen(false);
+                }}>
                   Cancelar
                 </Button>
                 <Button type="submit">
