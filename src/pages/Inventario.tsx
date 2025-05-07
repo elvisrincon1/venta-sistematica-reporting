@@ -1,150 +1,63 @@
 
-import React, { useState, useEffect } from 'react';
-import { useData, Producto } from '@/context/DataContext';
+import React, { useState } from 'react';
+import { Producto } from '@/context/DataContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Check, ChevronsUpDown, Edit, Trash } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { supabase } from "@/integrations/supabase/client";
+import ProductoForm from '@/components/inventario/ProductoForm';
+import ProductosList from '@/components/inventario/ProductosList';
+import DeleteAlertDialog from '@/components/inventario/DeleteAlertDialog';
+import { useSupabaseSync } from '@/hooks/useSupabaseSync';
 
 const Inventario = () => {
-  const { productos, proveedores, addProducto, updateProducto, deleteProducto } = useData();
-  const [nombre, setNombre] = useState('');
-  const [precioCompra, setPrecioCompra] = useState('');
-  const [precioVenta, setPrecioVenta] = useState('');
-  const [proveedor1Id, setProveedor1Id] = useState('');
-  const [proveedor2Id, setProveedor2Id] = useState('');
+  const { proveedores } = useSupabaseSync('proveedores', []);
+  const { 
+    data: productos, 
+    addItem: addProducto, 
+    updateItem: updateProducto, 
+    deleteItem: deleteProducto
+  } = useSupabaseSync<Producto>('productos', []);
+  
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [openProveedor1, setOpenProveedor1] = useState(false);
-  const [openProveedor2, setOpenProveedor2] = useState(false);
-  const [proveedor1Search, setProveedor1Search] = useState('');
-  const [proveedor2Search, setProveedor2Search] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [deleteAlertOpen, setDeleteAlertOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<string | null>(null);
-  // Validation state to show which fields are missing
-  const [validationErrors, setValidationErrors] = useState<{
-    nombre?: boolean;
-    precioCompra?: boolean;
-    precioVenta?: boolean;
-    proveedor1?: boolean;
-  }>({});
-  
-  // Aseguremos que tenemos datos cargados inicialmente desde Supabase
-  useEffect(() => {
-    const syncDataWithSupabase = async () => {
-      try {
-        // Sincronizar datos con Supabase
-        const { data: productosData, error: productosError } = await supabase
-          .from('productos')
-          .select('*');
-        
-        if (productosError) throw productosError;
-        console.log("Productos cargados desde Supabase:", productosData);
-        
-        // Los datos ya están disponibles a través del DataContext
-      } catch (error) {
-        console.error("Error sincronizando con Supabase:", error);
-      }
-    };
-    
-    syncDataWithSupabase();
-  }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Reset validation errors
-    setValidationErrors({});
-    
-    // Collect validation errors
-    const errors: {
-      nombre?: boolean;
-      precioCompra?: boolean;
-      precioVenta?: boolean;
-      proveedor1?: boolean;
-    } = {};
-    
-    if (!nombre) errors.nombre = true;
-    if (!precioCompra) errors.precioCompra = true;
-    if (!precioVenta) errors.precioVenta = true;
-    if (!proveedor1Id) errors.proveedor1 = true;
-    
-    // If there are errors, show them and prevent submission
-    if (Object.keys(errors).length > 0) {
-      setValidationErrors(errors);
-      toast.error('Por favor complete todos los campos requeridos');
-      return;
-    }
-    
-    const precioCompraNum = parseFloat(precioCompra);
-    const precioVentaNum = parseFloat(precioVenta);
-    
-    if (isNaN(precioCompraNum) || isNaN(precioVentaNum)) {
-      toast.error('Los precios deben ser valores numéricos');
-      return;
-    }
-    
-    if (precioVentaNum <= precioCompraNum) {
-      toast.error('El precio de venta debe ser mayor al precio de compra');
-      return;
-    }
-    
-    const productoData: Producto = {
-      id: editingId || Date.now().toString(),
-      nombre,
-      precioCompra: precioCompraNum,
-      precioVenta: precioVentaNum,
-      proveedor1Id,
-      proveedor2Id: proveedor2Id || undefined
-    };
-    
+  const handleSubmit = async (productoData: Producto) => {
     try {
+      const productoToSave = {
+        ...productoData,
+        id: productoData.id,
+        nombre: productoData.nombre,
+        preciocompra: productoData.precioCompra,
+        precioventa: productoData.precioVenta,
+        proveedor1id: productoData.proveedor1Id,
+        proveedor2id: productoData.proveedor2Id || null
+      };
+      
       if (editingId) {
-        updateProducto(productoData);
+        // Eliminar campos que Supabase espera en otro formato
+        delete (productoToSave as any).precioCompra;
+        delete (productoToSave as any).precioVenta;
+        delete (productoToSave as any).proveedor1Id;
+        delete (productoToSave as any).proveedor2Id;
         
-        // Actualizar en Supabase
-        const { error } = await supabase
-          .from('productos')
-          .update({
-            nombre: productoData.nombre,
-            preciocompra: productoData.precioCompra,
-            precioventa: productoData.precioVenta,
-            proveedor1id: productoData.proveedor1Id,
-            proveedor2id: productoData.proveedor2Id || null
-          })
-          .eq('id', productoData.id);
-          
-        if (error) throw error;
+        await updateProducto(productoData);
         toast.success('Producto actualizado exitosamente');
       } else {
-        addProducto(productoData);
+        // Eliminar campos que Supabase espera en otro formato
+        delete (productoToSave as any).precioCompra;
+        delete (productoToSave as any).precioVenta;
+        delete (productoToSave as any).proveedor1Id;
+        delete (productoToSave as any).proveedor2Id;
         
-        // Insertar en Supabase
-        const { error } = await supabase
-          .from('productos')
-          .insert({
-            id: productoData.id,
-            nombre: productoData.nombre,
-            preciocompra: productoData.precioCompra,
-            precioventa: productoData.precioVenta,
-            proveedor1id: productoData.proveedor1Id,
-            proveedor2id: productoData.proveedor2Id || null
-          });
-          
-        if (error) throw error;
+        await addProducto(productoData);
         toast.success('Producto agregado exitosamente');
       }
       
-      resetForm();
+      setEditingId(null);
       setIsDialogOpen(false);
     } catch (error) {
       console.error('Error al guardar en Supabase:', error);
@@ -152,23 +65,8 @@ const Inventario = () => {
     }
   };
 
-  const resetForm = () => {
-    setNombre('');
-    setPrecioCompra('');
-    setPrecioVenta('');
-    setProveedor1Id('');
-    setProveedor2Id('');
-    setEditingId(null);
-    setValidationErrors({});
-  };
-
-  const handleEdit = async (producto: Producto) => {
+  const handleEdit = (producto: Producto) => {
     setEditingId(producto.id);
-    setNombre(producto.nombre);
-    setPrecioCompra(producto.precioCompra.toString());
-    setPrecioVenta(producto.precioVenta.toString());
-    setProveedor1Id(producto.proveedor1Id);
-    setProveedor2Id(producto.proveedor2Id || '');
     setIsDialogOpen(true);
   };
 
@@ -180,55 +78,19 @@ const Inventario = () => {
   const handleDelete = async () => {
     if (productToDelete) {
       try {
-        deleteProducto(productToDelete);
-        
-        // Eliminar de Supabase
-        const { error } = await supabase
-          .from('productos')
-          .delete()
-          .eq('id', productToDelete);
-          
-        if (error) throw error;
-        
+        await deleteProducto(productToDelete);
         setDeleteAlertOpen(false);
         setProductToDelete(null);
-        toast.success('Producto eliminado exitosamente');
       } catch (error) {
         console.error('Error al eliminar de Supabase:', error);
-        toast.error('Error al eliminar el producto. Intente nuevamente.');
       }
     }
   };
 
-  // Arreglamos la función de filtrado para proveedores para que sea case-insensitive y más flexible
-  const filteredProveedor1 = proveedores.filter(proveedor => 
-    proveedor.nombre.toLowerCase().includes(proveedor1Search.toLowerCase().trim())
-  );
-
-  const filteredProveedor2 = proveedores.filter(proveedor => 
-    proveedor.nombre.toLowerCase().includes(proveedor2Search.toLowerCase().trim()) &&
-    proveedor.id !== proveedor1Id
-  );
-
-  const handleSelectProveedor1 = (value: string) => {
-    console.log("Selecting primary provider:", value);
-    setProveedor1Id(value);
-    setOpenProveedor1(false);
-    // Clear validation error when selected
-    if (validationErrors.proveedor1) {
-      setValidationErrors({...validationErrors, proveedor1: false});
-    }
-    // Reset secondary provider if it's the same as the primary
-    if (proveedor2Id === value) {
-      setProveedor2Id('');
-    }
-  };
-
-  const handleSelectProveedor2 = (value: string) => {
-    console.log("Selecting secondary provider:", value);
-    setProveedor2Id(value === proveedor2Id ? '' : value);
-    setOpenProveedor2(false);
-  };
+  // Preparar datos para editar
+  const productoEnEdicion = editingId 
+    ? productos.find(p => p.id === editingId) || null
+    : null;
 
   return (
     <div className="container mx-auto">
@@ -236,195 +98,15 @@ const Inventario = () => {
         <h1 className="text-2xl font-bold">Inventario</h1>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={resetForm}>Agregar Producto</Button>
+            <Button onClick={() => setEditingId(null)}>Agregar Producto</Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader>
-              <DialogTitle>{editingId ? 'Editar Producto' : 'Agregar Nuevo Producto'}</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-6 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="nombre" className="flex">
-                  Nombre <span className="text-red-500 ml-1">*</span>
-                </Label>
-                <Input
-                  id="nombre"
-                  value={nombre}
-                  onChange={(e) => setNombre(e.target.value)}
-                  className={cn(validationErrors.nombre && "border-red-500")}
-                />
-                {validationErrors.nombre && (
-                  <p className="text-sm text-red-500">Este campo es requerido</p>
-                )}
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="precioCompra" className="flex">
-                    Precio de Compra <span className="text-red-500 ml-1">*</span>
-                  </Label>
-                  <Input
-                    id="precioCompra"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={precioCompra}
-                    onChange={(e) => setPrecioCompra(e.target.value)}
-                    className={cn(validationErrors.precioCompra && "border-red-500")}
-                  />
-                  {validationErrors.precioCompra && (
-                    <p className="text-sm text-red-500">Este campo es requerido</p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="precioVenta" className="flex">
-                    Precio de Venta <span className="text-red-500 ml-1">*</span>
-                  </Label>
-                  <Input
-                    id="precioVenta"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={precioVenta}
-                    onChange={(e) => setPrecioVenta(e.target.value)}
-                    className={cn(validationErrors.precioVenta && "border-red-500")}
-                  />
-                  {validationErrors.precioVenta && (
-                    <p className="text-sm text-red-500">Este campo es requerido</p>
-                  )}
-                </div>
-              </div>
-              
-              {parseFloat(precioVenta) <= parseFloat(precioCompra) && precioVenta && precioCompra && (
-                <div className="text-sm text-red-500">
-                  El precio de venta debe ser mayor al precio de compra
-                </div>
-              )}
-              
-              <div className="space-y-2">
-                <Label htmlFor="proveedor1" className="flex">
-                  Proveedor Principal <span className="text-red-500 ml-1">*</span>
-                </Label>
-                <Popover open={openProveedor1} onOpenChange={setOpenProveedor1}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={openProveedor1}
-                      className={cn(
-                        "w-full justify-between",
-                        validationErrors.proveedor1 && "border-red-500"
-                      )}
-                    >
-                      {proveedor1Id ? proveedores.find((p) => p.id === proveedor1Id)?.nombre : "Seleccionar proveedor..."}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-full p-0 z-50">
-                    <Command>
-                      <CommandInput 
-                        placeholder="Buscar proveedor..." 
-                        value={proveedor1Search}
-                        onValueChange={setProveedor1Search}
-                      />
-                      <CommandList>
-                        {filteredProveedor1.length === 0 ? (
-                          <CommandEmpty>No se encontraron proveedores.</CommandEmpty>
-                        ) : (
-                          <CommandGroup>
-                            {filteredProveedor1.map((proveedor) => (
-                              <CommandItem
-                                key={proveedor.id}
-                                value={proveedor.id}
-                                onSelect={() => handleSelectProveedor1(proveedor.id)}
-                              >
-                                <Check
-                                  className={cn(
-                                    "mr-2 h-4 w-4",
-                                    proveedor1Id === proveedor.id ? "opacity-100" : "opacity-0"
-                                  )}
-                                />
-                                {proveedor.nombre}
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        )}
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-                {validationErrors.proveedor1 && (
-                  <p className="text-sm text-red-500">Este campo es requerido</p>
-                )}
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="proveedor2">
-                  Proveedor Secundario <span className="text-muted-foreground text-sm">(opcional)</span>
-                </Label>
-                <Popover open={openProveedor2} onOpenChange={setOpenProveedor2}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={openProveedor2}
-                      className="w-full justify-between"
-                      disabled={!proveedor1Id} // Disabled if primary provider is not selected
-                    >
-                      {proveedor2Id ? proveedores.find((p) => p.id === proveedor2Id)?.nombre : "Seleccionar proveedor..."}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-full p-0 z-50">
-                    <Command>
-                      <CommandInput 
-                        placeholder="Buscar proveedor..." 
-                        value={proveedor2Search}
-                        onValueChange={setProveedor2Search}
-                      />
-                      <CommandList>
-                        {filteredProveedor2.length === 0 ? (
-                          <CommandEmpty>No se encontraron proveedores.</CommandEmpty>
-                        ) : (
-                          <CommandGroup>
-                            {filteredProveedor2.map((proveedor) => (
-                              <CommandItem
-                                key={proveedor.id}
-                                value={proveedor.id}
-                                onSelect={() => handleSelectProveedor2(proveedor.id)}
-                              >
-                                <Check
-                                  className={cn(
-                                    "mr-2 h-4 w-4",
-                                    proveedor2Id === proveedor.id ? "opacity-100" : "opacity-0"
-                                  )}
-                                />
-                                {proveedor.nombre}
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        )}
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-                {!proveedor1Id && (
-                  <p className="text-sm text-amber-500">Seleccione primero un proveedor principal</p>
-                )}
-              </div>
-
-              <div className="flex justify-end space-x-2 pt-4">
-                <Button variant="outline" type="button" onClick={() => {
-                  resetForm();
-                  setIsDialogOpen(false);
-                }}>
-                  Cancelar
-                </Button>
-                <Button type="submit">
-                  {editingId ? 'Actualizar' : 'Guardar'}
-                </Button>
-              </div>
-            </form>
+            <ProductoForm 
+              proveedores={proveedores} 
+              initialData={productoEnEdicion}
+              onSubmit={handleSubmit}
+              onCancel={() => setIsDialogOpen(false)}
+            />
           </DialogContent>
         </Dialog>
       </div>
@@ -434,70 +116,20 @@ const Inventario = () => {
           <CardTitle>Lista de Productos</CardTitle>
         </CardHeader>
         <CardContent>
-          {productos.length === 0 ? (
-            <div className="text-center py-6 text-muted-foreground">
-              No hay productos registrados. Agrega uno para comenzar.
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nombre</TableHead>
-                    <TableHead>Precio Compra</TableHead>
-                    <TableHead>Precio Venta</TableHead>
-                    <TableHead>Proveedor Principal</TableHead>
-                    <TableHead>Proveedor Secundario</TableHead>
-                    <TableHead className="text-right">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {productos.map((producto) => (
-                    <TableRow key={producto.id}>
-                      <TableCell className="font-medium">{producto.nombre}</TableCell>
-                      <TableCell>${producto.precioCompra.toFixed(2)}</TableCell>
-                      <TableCell>${producto.precioVenta.toFixed(2)}</TableCell>
-                      <TableCell>
-                        {proveedores.find(p => p.id === producto.proveedor1Id)?.nombre || 'N/A'}
-                      </TableCell>
-                      <TableCell>
-                        {producto.proveedor2Id ? proveedores.find(p => p.id === producto.proveedor2Id)?.nombre : 'N/A'}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end space-x-2">
-                          <Button variant="ghost" size="icon" onClick={() => handleEdit(producto)}>
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => confirmDelete(producto.id)}>
-                            <Trash className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
+          <ProductosList 
+            productos={productos} 
+            proveedores={proveedores}
+            onEdit={handleEdit}
+            onDelete={confirmDelete}
+          />
         </CardContent>
       </Card>
 
-      <AlertDialog open={deleteAlertOpen} onOpenChange={setDeleteAlertOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta acción eliminará el producto y no podrá ser recuperado.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
-              Eliminar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeleteAlertDialog
+        open={deleteAlertOpen}
+        onOpenChange={setDeleteAlertOpen}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 };

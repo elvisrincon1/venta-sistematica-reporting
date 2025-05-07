@@ -1,18 +1,25 @@
 
 import React, { useState } from 'react';
-import { useData, Proveedor } from '@/context/DataContext';
+import { Proveedor } from '@/context/DataContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Edit, Trash } from 'lucide-react';
+import { Edit, Trash, Search } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
+import { useSupabaseSync } from '@/hooks/useSupabaseSync';
 
 const Proveedores = () => {
-  const { proveedores, addProveedor, updateProveedor, deleteProveedor } = useData();
+  const { 
+    data: proveedores, 
+    addItem: addProveedor, 
+    updateItem: updateProveedor, 
+    deleteItem: deleteProveedor 
+  } = useSupabaseSync<Proveedor>('proveedores', []);
+  
   const [nombre, setNombre] = useState('');
   const [contacto, setContacto] = useState('');
   const [telefono, setTelefono] = useState('');
@@ -21,8 +28,9 @@ const Proveedores = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [deleteAlertOpen, setDeleteAlertOpen] = useState(false);
   const [proveedorToDelete, setProveedorToDelete] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!nombre || !contacto || !telefono) {
@@ -38,16 +46,21 @@ const Proveedores = () => {
       email
     };
     
-    if (editingId) {
-      updateProveedor(proveedorData);
-      toast.success('Proveedor actualizado exitosamente');
-    } else {
-      addProveedor(proveedorData);
-      toast.success('Proveedor agregado exitosamente');
+    try {
+      if (editingId) {
+        await updateProveedor(proveedorData);
+        toast.success('Proveedor actualizado exitosamente');
+      } else {
+        await addProveedor(proveedorData);
+        toast.success('Proveedor agregado exitosamente');
+      }
+      
+      resetForm();
+      setIsDialogOpen(false);
+    } catch (error) {
+      console.error('Error al guardar proveedor:', error);
+      toast.error('Error al guardar. Intente nuevamente.');
     }
-    
-    resetForm();
-    setIsDialogOpen(false);
   };
 
   const resetForm = () => {
@@ -72,14 +85,28 @@ const Proveedores = () => {
     setDeleteAlertOpen(true);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (proveedorToDelete) {
-      deleteProveedor(proveedorToDelete);
-      setDeleteAlertOpen(false);
-      setProveedorToDelete(null);
-      toast.success('Proveedor eliminado exitosamente');
+      try {
+        await deleteProveedor(proveedorToDelete);
+        setDeleteAlertOpen(false);
+        setProveedorToDelete(null);
+      } catch (error) {
+        console.error('Error al eliminar proveedor:', error);
+        toast.error('Error al eliminar. Intente nuevamente.');
+      }
     }
   };
+
+  // Filtrar proveedores según el término de búsqueda
+  const filteredProveedores = searchTerm.trim() === ''
+    ? proveedores
+    : proveedores.filter(proveedor =>
+        proveedor.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        proveedor.contacto.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        proveedor.telefono.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (proveedor.email && proveedor.email.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
 
   return (
     <div className="container mx-auto">
@@ -152,9 +179,21 @@ const Proveedores = () => {
           <CardTitle>Lista de Proveedores</CardTitle>
         </CardHeader>
         <CardContent>
-          {proveedores.length === 0 ? (
+          <div className="flex items-center pb-4">
+            <div className="relative w-full">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nombre, contacto, teléfono o email..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-8 w-full"
+              />
+            </div>
+          </div>
+          
+          {filteredProveedores.length === 0 ? (
             <div className="text-center py-6 text-muted-foreground">
-              No hay proveedores registrados. Agrega uno para comenzar.
+              {searchTerm ? "No se encontraron proveedores que coincidan con la búsqueda." : "No hay proveedores registrados. Agrega uno para comenzar."}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -169,7 +208,7 @@ const Proveedores = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {proveedores.map((proveedor) => (
+                  {filteredProveedores.map((proveedor) => (
                     <TableRow key={proveedor.id}>
                       <TableCell className="font-medium">{proveedor.nombre}</TableCell>
                       <TableCell>{proveedor.contacto}</TableCell>

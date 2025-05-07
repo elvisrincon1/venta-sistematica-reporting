@@ -1,18 +1,25 @@
 
 import React, { useState } from 'react';
-import { useData, Afiliado } from '@/context/DataContext';
+import { Afiliado } from '@/context/DataContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Edit, Trash } from 'lucide-react';
+import { Edit, Trash, Search } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
+import { useSupabaseSync } from '@/hooks/useSupabaseSync';
 
 const Afiliados = () => {
-  const { afiliados, addAfiliado, updateAfiliado, deleteAfiliado } = useData();
+  const {
+    data: afiliados,
+    addItem: addAfiliado,
+    updateItem: updateAfiliado,
+    deleteItem: deleteAfiliado
+  } = useSupabaseSync<Afiliado>('afiliados', []);
+  
   const [nombre, setNombre] = useState('');
   const [identificacion, setIdentificacion] = useState('');
   const [contacto, setContacto] = useState('');
@@ -20,8 +27,9 @@ const Afiliados = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [deleteAlertOpen, setDeleteAlertOpen] = useState(false);
   const [afiliadoToDelete, setAfiliadoToDelete] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!nombre || !identificacion) {
@@ -36,16 +44,21 @@ const Afiliados = () => {
       contacto
     };
     
-    if (editingId) {
-      updateAfiliado(afiliadoData);
-      toast.success('Afiliado actualizado exitosamente');
-    } else {
-      addAfiliado(afiliadoData);
-      toast.success('Afiliado agregado exitosamente');
+    try {
+      if (editingId) {
+        await updateAfiliado(afiliadoData);
+        toast.success('Afiliado actualizado exitosamente');
+      } else {
+        await addAfiliado(afiliadoData);
+        toast.success('Afiliado agregado exitosamente');
+      }
+      
+      resetForm();
+      setIsDialogOpen(false);
+    } catch (error) {
+      console.error('Error al guardar afiliado:', error);
+      toast.error('Error al guardar. Intente nuevamente.');
     }
-    
-    resetForm();
-    setIsDialogOpen(false);
   };
 
   const resetForm = () => {
@@ -68,14 +81,27 @@ const Afiliados = () => {
     setDeleteAlertOpen(true);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (afiliadoToDelete) {
-      deleteAfiliado(afiliadoToDelete);
-      setDeleteAlertOpen(false);
-      setAfiliadoToDelete(null);
-      toast.success('Afiliado eliminado exitosamente');
+      try {
+        await deleteAfiliado(afiliadoToDelete);
+        setDeleteAlertOpen(false);
+        setAfiliadoToDelete(null);
+      } catch (error) {
+        console.error('Error al eliminar afiliado:', error);
+        toast.error('Error al eliminar. Intente nuevamente.');
+      }
     }
   };
+
+  // Filtrar afiliados según el término de búsqueda
+  const filteredAfiliados = searchTerm.trim() === ''
+    ? afiliados
+    : afiliados.filter(afiliado =>
+        afiliado.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        afiliado.identificacion.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (afiliado.contacto && afiliado.contacto.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
 
   return (
     <div className="container mx-auto">
@@ -137,9 +163,21 @@ const Afiliados = () => {
           <CardTitle>Lista de Afiliados</CardTitle>
         </CardHeader>
         <CardContent>
-          {afiliados.length === 0 ? (
+          <div className="flex items-center pb-4">
+            <div className="relative w-full">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nombre, identificación o contacto..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-8 w-full"
+              />
+            </div>
+          </div>
+          
+          {filteredAfiliados.length === 0 ? (
             <div className="text-center py-6 text-muted-foreground">
-              No hay afiliados registrados. Agrega uno para comenzar.
+              {searchTerm ? "No se encontraron afiliados que coincidan con la búsqueda." : "No hay afiliados registrados. Agrega uno para comenzar."}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -153,7 +191,7 @@ const Afiliados = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {afiliados.map((afiliado) => (
+                  {filteredAfiliados.map((afiliado) => (
                     <TableRow key={afiliado.id}>
                       <TableCell className="font-medium">{afiliado.nombre}</TableCell>
                       <TableCell>{afiliado.identificacion}</TableCell>
