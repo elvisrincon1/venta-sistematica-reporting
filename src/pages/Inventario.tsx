@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useData, Producto } from '@/context/DataContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import { Check, ChevronsUpDown, Edit, Trash } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
+import { supabase } from "@/integrations/supabase/client";
 
 const Inventario = () => {
   const { productos, proveedores, addProducto, updateProducto, deleteProducto } = useData();
@@ -36,8 +37,29 @@ const Inventario = () => {
     precioVenta?: boolean;
     proveedor1?: boolean;
   }>({});
+  
+  // Aseguremos que tenemos datos cargados inicialmente desde Supabase
+  useEffect(() => {
+    const syncDataWithSupabase = async () => {
+      try {
+        // Sincronizar datos con Supabase
+        const { data: productosData, error: productosError } = await supabase
+          .from('productos')
+          .select('*');
+        
+        if (productosError) throw productosError;
+        console.log("Productos cargados desde Supabase:", productosData);
+        
+        // Los datos ya están disponibles a través del DataContext
+      } catch (error) {
+        console.error("Error sincronizando con Supabase:", error);
+      }
+    };
+    
+    syncDataWithSupabase();
+  }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Reset validation errors
@@ -85,16 +107,49 @@ const Inventario = () => {
       proveedor2Id: proveedor2Id || undefined
     };
     
-    if (editingId) {
-      updateProducto(productoData);
-      toast.success('Producto actualizado exitosamente');
-    } else {
-      addProducto(productoData);
-      toast.success('Producto agregado exitosamente');
+    try {
+      if (editingId) {
+        updateProducto(productoData);
+        
+        // Actualizar en Supabase
+        const { error } = await supabase
+          .from('productos')
+          .update({
+            nombre: productoData.nombre,
+            preciocompra: productoData.precioCompra,
+            precioventa: productoData.precioVenta,
+            proveedor1id: productoData.proveedor1Id,
+            proveedor2id: productoData.proveedor2Id || null
+          })
+          .eq('id', productoData.id);
+          
+        if (error) throw error;
+        toast.success('Producto actualizado exitosamente');
+      } else {
+        addProducto(productoData);
+        
+        // Insertar en Supabase
+        const { error } = await supabase
+          .from('productos')
+          .insert({
+            id: productoData.id,
+            nombre: productoData.nombre,
+            preciocompra: productoData.precioCompra,
+            precioventa: productoData.precioVenta,
+            proveedor1id: productoData.proveedor1Id,
+            proveedor2id: productoData.proveedor2Id || null
+          });
+          
+        if (error) throw error;
+        toast.success('Producto agregado exitosamente');
+      }
+      
+      resetForm();
+      setIsDialogOpen(false);
+    } catch (error) {
+      console.error('Error al guardar en Supabase:', error);
+      toast.error('Error al guardar el producto. Intente nuevamente.');
     }
-    
-    resetForm();
-    setIsDialogOpen(false);
   };
 
   const resetForm = () => {
@@ -107,7 +162,7 @@ const Inventario = () => {
     setValidationErrors({});
   };
 
-  const handleEdit = (producto: Producto) => {
+  const handleEdit = async (producto: Producto) => {
     setEditingId(producto.id);
     setNombre(producto.nombre);
     setPrecioCompra(producto.precioCompra.toString());
@@ -122,21 +177,36 @@ const Inventario = () => {
     setDeleteAlertOpen(true);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (productToDelete) {
-      deleteProducto(productToDelete);
-      setDeleteAlertOpen(false);
-      setProductToDelete(null);
-      toast.success('Producto eliminado exitosamente');
+      try {
+        deleteProducto(productToDelete);
+        
+        // Eliminar de Supabase
+        const { error } = await supabase
+          .from('productos')
+          .delete()
+          .eq('id', productToDelete);
+          
+        if (error) throw error;
+        
+        setDeleteAlertOpen(false);
+        setProductToDelete(null);
+        toast.success('Producto eliminado exitosamente');
+      } catch (error) {
+        console.error('Error al eliminar de Supabase:', error);
+        toast.error('Error al eliminar el producto. Intente nuevamente.');
+      }
     }
   };
 
+  // Arreglamos la función de filtrado para proveedores para que sea case-insensitive y más flexible
   const filteredProveedor1 = proveedores.filter(proveedor => 
-    proveedor.nombre.toLowerCase().includes(proveedor1Search.toLowerCase())
+    proveedor.nombre.toLowerCase().includes(proveedor1Search.toLowerCase().trim())
   );
 
   const filteredProveedor2 = proveedores.filter(proveedor => 
-    proveedor.nombre.toLowerCase().includes(proveedor2Search.toLowerCase()) &&
+    proveedor.nombre.toLowerCase().includes(proveedor2Search.toLowerCase().trim()) &&
     proveedor.id !== proveedor1Id
   );
 
@@ -257,25 +327,28 @@ const Inventario = () => {
                         value={proveedor1Search}
                         onValueChange={setProveedor1Search}
                       />
-                      <CommandEmpty>No se encontraron proveedores.</CommandEmpty>
                       <CommandList>
-                        <CommandGroup>
-                          {filteredProveedor1.map((proveedor) => (
-                            <CommandItem
-                              key={proveedor.id}
-                              value={proveedor.id}
-                              onSelect={() => handleSelectProveedor1(proveedor.id)}
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  proveedor1Id === proveedor.id ? "opacity-100" : "opacity-0"
-                                )}
-                              />
-                              {proveedor.nombre}
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
+                        {filteredProveedor1.length === 0 ? (
+                          <CommandEmpty>No se encontraron proveedores.</CommandEmpty>
+                        ) : (
+                          <CommandGroup>
+                            {filteredProveedor1.map((proveedor) => (
+                              <CommandItem
+                                key={proveedor.id}
+                                value={proveedor.id}
+                                onSelect={() => handleSelectProveedor1(proveedor.id)}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    proveedor1Id === proveedor.id ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                {proveedor.nombre}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        )}
                       </CommandList>
                     </Command>
                   </PopoverContent>
@@ -309,25 +382,28 @@ const Inventario = () => {
                         value={proveedor2Search}
                         onValueChange={setProveedor2Search}
                       />
-                      <CommandEmpty>No se encontraron proveedores.</CommandEmpty>
                       <CommandList>
-                        <CommandGroup>
-                          {filteredProveedor2.map((proveedor) => (
-                            <CommandItem
-                              key={proveedor.id}
-                              value={proveedor.id}
-                              onSelect={() => handleSelectProveedor2(proveedor.id)}
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  proveedor2Id === proveedor.id ? "opacity-100" : "opacity-0"
-                                )}
-                              />
-                              {proveedor.nombre}
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
+                        {filteredProveedor2.length === 0 ? (
+                          <CommandEmpty>No se encontraron proveedores.</CommandEmpty>
+                        ) : (
+                          <CommandGroup>
+                            {filteredProveedor2.map((proveedor) => (
+                              <CommandItem
+                                key={proveedor.id}
+                                value={proveedor.id}
+                                onSelect={() => handleSelectProveedor2(proveedor.id)}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    proveedor2Id === proveedor.id ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                {proveedor.nombre}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        )}
                       </CommandList>
                     </Command>
                   </PopoverContent>

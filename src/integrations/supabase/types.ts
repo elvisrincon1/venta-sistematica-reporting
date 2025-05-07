@@ -9,7 +9,138 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      afiliados: {
+        Row: {
+          contacto: string | null
+          id: string
+          identificacion: string | null
+          nombre: string
+        }
+        Insert: {
+          contacto?: string | null
+          id?: string
+          identificacion?: string | null
+          nombre: string
+        }
+        Update: {
+          contacto?: string | null
+          id?: string
+          identificacion?: string | null
+          nombre?: string
+        }
+        Relationships: []
+      }
+      productos: {
+        Row: {
+          id: string
+          nombre: string
+          preciocompra: number
+          precioventa: number
+          proveedor1id: string | null
+          proveedor2id: string | null
+        }
+        Insert: {
+          id?: string
+          nombre: string
+          preciocompra: number
+          precioventa: number
+          proveedor1id?: string | null
+          proveedor2id?: string | null
+        }
+        Update: {
+          id?: string
+          nombre?: string
+          preciocompra?: number
+          precioventa?: number
+          proveedor1id?: string | null
+          proveedor2id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "productos_proveedor1id_fkey"
+            columns: ["proveedor1id"]
+            isOneToOne: false
+            referencedRelation: "proveedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "productos_proveedor2id_fkey"
+            columns: ["proveedor2id"]
+            isOneToOne: false
+            referencedRelation: "proveedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      proveedores: {
+        Row: {
+          contacto: string | null
+          email: string | null
+          id: string
+          nombre: string
+          telefono: string | null
+        }
+        Insert: {
+          contacto?: string | null
+          email?: string | null
+          id?: string
+          nombre: string
+          telefono?: string | null
+        }
+        Update: {
+          contacto?: string | null
+          email?: string | null
+          id?: string
+          nombre?: string
+          telefono?: string | null
+        }
+        Relationships: []
+      }
+      ventas: {
+        Row: {
+          afiliadoid: string | null
+          cantidad: number
+          fecha: string
+          id: string
+          preciocompra: number
+          precioventa: number
+          productoid: string | null
+        }
+        Insert: {
+          afiliadoid?: string | null
+          cantidad: number
+          fecha: string
+          id?: string
+          preciocompra: number
+          precioventa: number
+          productoid?: string | null
+        }
+        Update: {
+          afiliadoid?: string | null
+          cantidad?: number
+          fecha?: string
+          id?: string
+          preciocompra?: number
+          precioventa?: number
+          productoid?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ventas_afiliadoid_fkey"
+            columns: ["afiliadoid"]
+            isOneToOne: false
+            referencedRelation: "afiliados"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ventas_productoid_fkey"
+            columns: ["productoid"]
+            isOneToOne: false
+            referencedRelation: "productos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
